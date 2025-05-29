@@ -1,0 +1,174 @@
+# Sistema Predictivo para Mantenimiento de Flota Minera con entrenamiento y guardado del modelo
+
+import pandas as pd
+import matplotlib.pyplot as plt
+import numpy as np
+from datetime import datetime, timedelta
+from tensorflow.keras.models import Sequential, load_model
+from tensorflow.keras.layers import Dense, Input
+from tensorflow.keras.callbacks import EarlyStopping
+from sklearn.preprocessing import MinMaxScaler
+import os
+import shutil
+
+# Paso 1: Cargar CSV
+data_path = "/Users/jherson.lg/Desktop/Proyecto/Tesis/data.csv"
+data = pd.read_csv(data_path)
+
+# Paso 2: Preprocesamiento
+data['Fecha'] = pd.to_datetime(data['Fecha'])
+data.sort_values('Fecha', inplace=True)
+data.rename(columns={
+    'Tiempo de funcionamiento (horas)': 'TIEMPO_FUNCIONAMIENTO',
+    'Tiempo de trabajo (horas)': 'TIEMPO_TRABAJO',
+    'Tiempo en vacío (horas)': 'TIEMPO_EN_VACIO',
+    'Último horómetro conocido (Horas)': 'HOROMETRO'
+}, inplace=True)
+
+# Paso 3: Visualización
+modelo_input = input("Ingrese el modelo del equipo: ")
+serie_input = input("Ingrese la serie del equipo: ")
+
+def graficar_utilizacion(data, modelo, serie):
+    plt.figure(figsize=(12, 6))
+    plt.plot(data['Fecha'], data['TIEMPO_FUNCIONAMIENTO'], label='Funcionamiento', color='blue')
+    plt.plot(data['Fecha'], data['TIEMPO_TRABAJO'], label='Trabajo', color='green')
+    plt.plot(data['Fecha'], data['TIEMPO_EN_VACIO'], label='En vacío', color='orange')
+    plt.title(f'Utilización: {modelo} - Serie: {serie}')
+    plt.xlabel('Fecha')
+    plt.ylabel('Horas')
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
+
+graficar_utilizacion(data, modelo_input, serie_input)
+
+# Paso 4: Predicción y entrenamiento
+
+def predecir_mantenimiento_dl(data):
+    import shutil
+    from tensorflow.keras.callbacks import EarlyStopping
+
+    data['DIA'] = (data['Fecha'] - data['Fecha'].min()).dt.days
+    data_limpia = data.dropna(subset=['HOROMETRO', 'DIA'])
+
+    horo_mant = float(input("🔧 Ingrese el horómetro del último mantenimiento: "))
+    fecha_mant_str = input("📅 Ingrese la fecha del último mantenimiento (YYYY-MM-DD): ")
+    fecha_mant = pd.to_datetime(fecha_mant_str)
+
+    X = data_limpia[['DIA']].values
+    y = data_limpia['HOROMETRO'].values.reshape(-1, 1)
+
+    scaler_X = MinMaxScaler()
+    scaler_y = MinMaxScaler()
+    X_scaled = scaler_X.fit_transform(X)
+    y_scaled = scaler_y.fit_transform(y)
+
+    model = Sequential([
+        Input(shape=(1,)),
+        Dense(64, activation='relu'),
+        Dense(32, activation='relu'),
+        Dense(1)
+    ])
+    model.compile(optimizer='adam', loss='mse')
+    early_stop = EarlyStopping(monitor='loss', patience=20, restore_best_weights=True)
+    model.fit(X_scaled, y_scaled, epochs=500, verbose=0, callbacks=[early_stop])
+
+    # Crear carpeta de entrenamiento y guardar artefactos
+    training_dir = "/Users/jherson.lg/Desktop/Proyecto/Tesis/Training"
+    os.makedirs(training_dir, exist_ok=True)
+    model.save(os.path.join(training_dir, "modelo_entrenado.h5"))
+    np.save(os.path.join(training_dir, "scaler_X_min.npy"), scaler_X.data_min_)
+    np.save(os.path.join(training_dir, "scaler_X_max.npy"), scaler_X.data_max_)
+    np.save(os.path.join(training_dir, "scaler_y_min.npy"), scaler_y.data_min_)
+    np.save(os.path.join(training_dir, "scaler_y_max.npy"), scaler_y.data_max_)
+
+    # Mostrar log
+    print(f"\n✅ Modelo y parámetros almacenados correctamente en: {training_dir}")
+
+    # Cálculos de mantenimiento
+    dia_actual = X[-1][0]
+    horometro_real = y[-1][0]
+    fecha_actual = data_limpia['Fecha'].iloc[-1]
+    dias_trans = (fecha_actual - fecha_mant).days
+    horas_trans = data_limpia['HOROMETRO'].iloc[-1] - horo_mant
+    horas_diarias = horas_trans / dias_trans if dias_trans > 0 else 10
+
+    if horas_diarias > 10:
+        intervalo = 200
+    elif horas_diarias < 7:
+        intervalo = 260
+    else:
+        intervalo = 240
+
+    horas_restantes = intervalo - horas_trans
+    dias_estimados = int(np.ceil(horas_restantes / horas_diarias))
+    siguiente_horometro = horo_mant + intervalo
+    fecha_estimada = fecha_mant + timedelta(days=dias_estimados)
+
+    # Gráficos
+    dia_pred = data_limpia['DIA'].iloc[-1] + dias_estimados
+    X_pred_scaled = scaler_X.transform([[dia_pred]])
+    horometro_pred = scaler_y.inverse_transform(model.predict(X_pred_scaled))[0][0]
+
+    # Gráfico de líneas
+    plt.figure(figsize=(10, 5))
+    plt.plot(data_limpia['Fecha'], y, label="Horómetro actual", color='blue')
+    plt.axvline(fecha_estimada, color='orange', linestyle='--', label="Fecha estimada")
+    plt.axhline(siguiente_horometro, color='orange', linestyle='--')
+    plt.scatter([fecha_estimada], [siguiente_horometro], color='orange')
+    plt.title(f"Predicción - {modelo_input} {serie_input}")
+    plt.xlabel("Fecha")
+    plt.ylabel("Horómetro")
+    plt.legend()
+    plt.tight_layout()
+    plt.figtext(0.5, -0.08, f"🔧 Horómetro estimado: {siguiente_horometro:.2f}\n📅 Fecha estimada: {fecha_estimada.strftime('%d/%m/%Y')}", ha="center", fontsize=10)
+    plt.show()
+
+    # Gráfico de barras
+    etiquetas = ['Actual', 'Mantenimiento']
+    valores = [horometro_real, siguiente_horometro]
+    colores = ['#1f77b4', '#ff7f0e']
+    plt.figure(figsize=(8, 5))
+    bars = plt.bar(etiquetas, valores, color=colores)
+    for bar in bars:
+        height = bar.get_height()
+        plt.text(bar.get_x() + bar.get_width()/2.0, height + 5, f'{height:.2f}', ha='center', va='bottom')
+    plt.title(f"Horómetro Actual vs Mantenimiento\n({modelo_input} - Serie: {serie_input})")
+    plt.ylabel("Valor Horómetro")
+    plt.grid(axis='y', linestyle='--', alpha=0.7)
+    plt.tight_layout()
+    plt.figtext(0.5, -0.08, f"🔧 Estimado: {siguiente_horometro:.2f} hrs\n📅 Fecha estimada: {fecha_estimada.strftime('%d/%m/%Y')}", ha="center", fontsize=10)
+    plt.show()
+
+    # Consola
+    print(f"\n📋 Horómetro último mantenimiento: {horo_mant:.2f}")
+    print(f"🔍 Horómetro actual: {data_limpia['HOROMETRO'].iloc[-1]:.2f}")
+    print(f"🪚 Estimado para mantenimiento: {siguiente_horometro:.2f}")
+    print(f"📅 Fecha estimada: {fecha_estimada.strftime('%d/%m/%Y')}")
+
+predecir_mantenimiento_dl(data)
+
+# Paso 5: Fallas
+fallas = []
+colores = {'azul': 'blue', 'naranja': 'orange', 'rojo': 'red'}
+print("\nRegistro de fallas (escriba 'no' para terminar):")
+while True:
+    fallo = input("\u00bfHay una falla que reportar? (si/no): ").lower()
+    if fallo == 'no': break
+    descripcion = input("Descripción de la falla: ")
+    color = input("Color de alerta (azul/naranja/rojo): ").lower()
+    fallas.append((descripcion, color))
+
+if fallas:
+    plt.figure(figsize=(8, 3))
+    for i, (falla, color) in enumerate(fallas):
+        plt.barh(i, 1, color=colores.get(color, 'gray'))
+        plt.text(0.1, i, falla, va='center', ha='left')
+    plt.yticks(range(len(fallas)), [f[0] for f in fallas])
+    plt.title("Fallas reportadas")
+    plt.axis('off')
+    plt.tight_layout()
+    plt.show()
+##Ejectuar con: python3 Sistema.py
