@@ -1,0 +1,10 @@
+# Ignorar archivos innecesarios o pesados
+__pycache__/
+*.pyc
+*.npy
+*.h5
+*.keras
+*.csv
+.DS_Store
+Training/
+BackUps/
