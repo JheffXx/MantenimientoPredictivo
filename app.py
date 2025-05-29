@@ -42,3 +42,5 @@ if uploaded_file:
             st.error(f"❌ Error durante la predicción: {e}")
 else:
     st.info("⬆️ Sube un archivo CSV para comenzar.")
+
+#Ejecutar el script con: python3 streamlit run app.py
