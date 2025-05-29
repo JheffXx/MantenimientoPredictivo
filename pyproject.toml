@@ -1,2 +1,2 @@
 [tool.streamlit]
-python_version = "3.9" # Puedes probar "3.10" o "3.11" si 3.9 no funciona
+python_version = "3.10" 
