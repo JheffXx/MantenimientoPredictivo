@@ -12,3 +12,5 @@ horo_mant = float(input("🔧 Ingrese el horómetro del último mantenimiento: "
 fecha_mant = input("📅 Ingrese la fecha del último mantenimiento (YYYY-MM-DD): ")
 
 sistema.predecir_mantenimiento(horo_mant, fecha_mant)
+
+# Ejecutar el script con: python3 Sistema.py

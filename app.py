@@ -43,4 +43,4 @@ if uploaded_file:
 else:
     st.info("⬆️ Sube un archivo CSV para comenzar.")
 
-#Ejecutar el script con: python3 streamlit run app.py
+#Ejecutar el script con: python3 -m streamlit run app.py
