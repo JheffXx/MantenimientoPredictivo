@@ -59,8 +59,12 @@ class MantenimientoPredictivo:
         np.save(os.path.join(self.training_path, 'scaler_y_min.npy'), self.scaler_y.data_min_)
         np.save(os.path.join(self.training_path, 'scaler_y_max.npy'), self.scaler_y.data_max_)
 
+        # fecha_actual = data_limpia['Fecha'].iloc[-1] #Error al intentar acceder a la última fecha
+        # horometro_actual = data_limpia['HOROMETRO'].iloc[-1]
+        data_limpia.sort_values('Fecha', inplace=True)  # 🔑 Asegura el orden cronológico
         fecha_actual = data_limpia['Fecha'].iloc[-1]
         horometro_actual = data_limpia['HOROMETRO'].iloc[-1]
+        
         dias_trans = (fecha_actual - fecha_mant).days
         horas_trans = horometro_actual - horo_mant
         horas_diarias = horas_trans / dias_trans if dias_trans > 0 else 10
